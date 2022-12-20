@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
@@ -34,6 +33,30 @@ impl Plays {
             _ => panic!("Invalid play"),
         }
     }
+    fn win(&self) -> Plays {
+        match self {
+            Plays::Rock => Plays::Paper,
+            Plays::Paper => Plays::Scissors,
+            Plays::Scissors => Plays::Rock,
+        }
+    }
+    fn loss(&self) -> Plays {
+        match self {
+            Plays::Rock => Plays::Scissors,
+            Plays::Paper => Plays::Rock,
+            Plays::Scissors => Plays::Paper,
+        }
+    }
+    fn draw(&self) -> Plays {
+        self.clone()
+    }
+    fn get_result(&self, result: &PlayResult) -> Plays {
+        match result {
+            PlayResult::Win => self.win(),
+            PlayResult::Loss => self.loss(),
+            PlayResult::Draw => self.draw(),
+        }
+    }
 }
 impl Sub for Plays {
     type Output = i32;
@@ -59,8 +82,30 @@ fn calculate_score(path: PathBuf) -> i32 {
 
 fn solution2() {
     let path = PathBuf::from_str("./src/data/2.txt").unwrap();
-    print!("{}", calculate_score(path));
+    println!("{}", calculate_score(path));
 }
 pub fn test2a() {
     solution2();
+}
+
+pub fn test2b() {
+    let lines = io::BufReader::new(File::open("./src/data/2.txt").unwrap()).lines();
+    let mut total = 0;
+    for line in lines {
+        let line = line.unwrap();
+        let split = line.split(" ").collect::<Vec<&str>>();
+        let opponent = Plays::from_char(&split[0].chars().next().unwrap());
+        let result = match split[1].chars().next().unwrap() {
+            'X' => PlayResult::Loss,
+            'Y' => PlayResult::Draw,
+            'Z' => PlayResult::Win,
+            _ => panic!("FATAL ERROR"),
+        };
+
+        let choice = opponent.get_result(&result);
+
+        let score = (result as i32) + (choice as i32);
+        total += score;
+    }
+    println!("{}", total);
 }
