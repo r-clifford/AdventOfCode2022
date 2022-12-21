@@ -16,4 +16,5 @@ fn main() {
     day_4::test4a();
     day_4::test4b();
     day_5::test5a();
+    day_5::test5b();
 }
