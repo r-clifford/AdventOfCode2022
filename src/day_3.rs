@@ -1,4 +1,3 @@
-use std::hash::Hash;
 use std::path::PathBuf;
 use std::io;
 use std::io::BufRead;

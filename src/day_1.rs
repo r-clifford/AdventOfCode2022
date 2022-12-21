@@ -1,6 +1,5 @@
-use std::num::ParseIntError;
 use std::path::PathBuf;
-use std::io::{self, BufReader, BufRead};
+use std::io::{BufReader, BufRead};
 use std::fs::File;
 use std::str::FromStr;
 
@@ -26,7 +25,7 @@ fn solution1(path: PathBuf) -> i32 {
 pub fn test1() {
     let path = match PathBuf::from_str("./src/data/1.txt") {
         Ok(p) => p,
-        Err(e) => panic!("Invalid path"),
+        Err(_) => panic!("Invalid path"),
     };
     println!("{}", solution1(path));
 }
