@@ -1,11 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #define INIT_CAP 20
-
-void strip_newline(char* s) {
+#define THRESHOLD 100000
+#define TOTAL_SPACE 70000000
+#define REQ_SPACE 30000000
+void strip_newline(char *s)
+{
     size_t len = strlen(s);
-    if (s[len-1] == '\n') {
+    if (s[len - 1] == '\n')
+    {
         s[len - 1] = '\0';
     }
 }
@@ -21,16 +26,13 @@ typedef struct File_T
     int is_dir;
 } file_t;
 int add_child(file_t *wd, char *target, size_t size, int is_dir);
-typedef enum
-{
-    CMD_CD,
-    CMD_LS,
-} CMD;
+
 file_t *create_fs()
 {
     file_t *root = malloc(sizeof(*root));
     root->parent = NULL;
-    root->name = "/";
+    root->name = malloc(2*sizeof(char));
+    strcpy(root->name, "/");
     root->size = 0;
     root->child_size = 0;
     root->is_dir = 1;
@@ -38,7 +40,22 @@ file_t *create_fs()
     root->children = malloc(sizeof(*root) * root->capacity);
     return root;
 }
-void pad(size_t n) {
+void destroy_fs(file_t* wd) {
+    if (wd->children == NULL) {
+        free(wd->name);
+        free(wd);
+        return;
+    }
+    for (size_t i = 0; i < wd->child_size; i++)
+    {
+        destroy_fs(wd->children[i]);
+    }
+    free(wd->children);
+    free(wd->name);
+    free(wd);
+}
+void pad(size_t n)
+{
     for (size_t i = 0; i < n; i++)
     {
         printf("\t");
@@ -52,8 +69,13 @@ void print_postorder(file_t *wd, size_t depth)
         printf("- %s (file, size=%lu)\n", wd->name, wd->size);
         return;
     }
+    char *bt = "*";
+    if (wd->size > THRESHOLD)
+    {
+        bt = "";
+    }
     pad(depth);
-    printf("- %s (dir)\n", wd->name);
+    printf("- %s (dir, size=%lu)[%s]\n", wd->name, wd->size, bt);
     depth++;
     for (size_t i = 0; i < wd->child_size; i++)
     {
@@ -71,24 +93,18 @@ size_t calculate_size(file_t *wd)
     {
         if (wd->children[i]->is_dir)
         {
-            total += calculate_size(wd->children[i]);
+            size_t size = calculate_size(wd->children[i]);
+            total += size;
         }
         else
         {
-            total += wd->size;
+            total += wd->children[i]->size;
         }
     }
+    wd->size = total;
     return total;
 }
-char **get_children_names(file_t *wd)
-{
-    char **children = malloc(wd->child_size * sizeof(*children));
-    for (size_t i = 0; i < wd->child_size; i++)
-    {
-        children[i] = wd->children[i]->name;
-    }
-    return children;
-}
+
 file_t *get_child(file_t *wd, char *target)
 {
     for (size_t i = 0; i < wd->child_size; i++)
@@ -106,7 +122,7 @@ file_t *get_root(file_t *wd)
     {
         return wd;
     }
-    get_root(wd->parent);
+    return get_root(wd->parent);
 }
 file_t *fs_cd(file_t *wd, char *target)
 {
@@ -202,7 +218,6 @@ file_t *parse_cmd(file_t *wd, char *s)
     {
         token = strtok(NULL, delim);
     }
-    CMD cmd = CMD_LS;
     while (token)
     {
         int is_cd = !strcmp(token, "cd");
@@ -210,13 +225,11 @@ file_t *parse_cmd(file_t *wd, char *s)
         if (is_ls)
         {
             token = strtok(NULL, delim);
-            cmd = CMD_LS;
         }
         else if (is_cd)
         {
             char *target = strtok(NULL, delim);
             wd = fs_cd(wd, target);
-            cmd = CMD_CD;
         }
         else
         {
@@ -239,21 +252,91 @@ file_t *parse_cmd(file_t *wd, char *s)
     }
     return wd;
 }
+size_t sum_gt_thresh(file_t *wd, size_t threshold)
+{
+    if (wd->children == NULL)
+    {
+        return 0;
+    }
+    size_t total = 0;
+    if (wd->size <= threshold)
+    {
+        total = wd->size;
+        printf("%s|%lu\n", wd->name, wd->size);
+    }
+    for (size_t i = 0; i < wd->child_size; i++)
+    {
+        size_t size = sum_gt_thresh(wd->children[i], threshold);
+        total += size;
+    }
+    return total;
+}
+size_t search_helper(file_t *wd, size_t len, file_t *candidates[len], size_t idx, size_t threshold)
+{
+    if (wd->children == NULL)
+    {
+        return idx;
+    }
+    if (wd->size >= threshold)
+    {
+        candidates[idx++] = wd;
+    }
+    else
+    {
+        return idx;
+    }
+    for (size_t i = 0; i < wd->child_size; i++)
+    {
+        idx = search_helper(wd->children[i], len, candidates, idx, threshold);
+    }
+    return idx;
+}
+size_t min(size_t len, file_t *candidates[len])
+{
+    size_t minimum = SSIZE_MAX;
+    size_t current;
+    for (size_t i = 0; i < len; i++)
+    {
+        current = candidates[i]->size;
+        printf("%lu/%lu\n", current, minimum);
+        if (current < minimum)
+        {
+            minimum = current;
+        }
+    }
+    free(candidates);
+    return minimum;
+}
+size_t find_del(file_t *wd)
+{
+    // assume < 100
+    file_t **candidates = malloc(sizeof(file_t) * 100);
+    size_t unused = TOTAL_SPACE - wd->size;
+    size_t threshold = REQ_SPACE - unused;
+    printf("Req to free: %lu\n", threshold);
+    size_t idx = search_helper(wd, 100, candidates, 0, threshold);
+    return min(idx, candidates);
+}
 int main()
 {
-    FILE *f = fopen("./data/test.txt", "r");
-       char *line = malloc(sizeof(line) * 100);
+    FILE *f = fopen("./data/7.txt", "r");
+    char *line = malloc(sizeof(line) * 100);
     // char line[100];
     file_t *wd = create_fs();
     while (fgets(line, 100, f) != NULL)
     {
         wd = parse_cmd(wd, line);
     }
+    fclose(f);
     wd = get_root(wd);
+    // print_postorder(wd, 0);
+    calculate_size(wd);
     print_postorder(wd, 0);
-    //    char** children = get_children_names(wd);
-    //    for (size_t i = 0; i < wd->child_size; i++) {
-    //        printf("%s\n", children[i]);
-    //    }
+    size_t total = sum_gt_thresh(wd, THRESHOLD);
+    printf("%lu\n", total);
+    size_t req = find_del(wd);
+    printf("%lu\n", req);
+    destroy_fs(wd);
+    free(line);
     return 0;
 }
