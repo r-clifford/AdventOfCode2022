@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 int main() {
-    char *path = "./src/data/1.txt";
+    char *path = "./data/1.txt";
     FILE *f = fopen(path, "r");
     if (f == NULL) {
         return -1;
