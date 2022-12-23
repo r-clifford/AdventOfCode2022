@@ -103,54 +103,53 @@ struct Visited {
 
 #[derive(Debug, Clone, Default)]
 struct State {
-    head: Position,
-    tail: Position,
+    rope: Vec<Position>,
     visited: Visited,
 }
 impl State {
-    fn new() -> Self {
-        Default::default()
+    fn new(n: usize) -> Self {
+        let mut ret = Self::default();
+        for _ in 0..n {
+            ret.rope.push(Position::default());
+        } 
+        ret
     }
     fn next(&mut self, movement: &mut Movement) {
         // dbg!(*movement);
         while movement.distance > 0 {
-            let old = self.head;
-            self.head.exec(movement);
-            let diff = self.head - self.tail;
-            if (isize::abs(diff.0) > 1) || (isize::abs(diff.1) > 1) {
-                self.tail = old;
-                // match isize::signum(diff.0) {
-                //     1 => self.tail.right(),
-                //     -1 => self.tail.left(),
-                //     _ => {},
-                // }
-                // match isize::signum(diff.1) {
-                //    1 => self.tail.up(),
-                //    -1 => self.tail.down(),
-                //    _ => {},
-                // }
-                let inserted = self.visited.positions.insert(self.tail);
+            self.rope[0].exec(movement);
+            for i in 1..self.rope.len() {
+                let current = self.rope[i];
+                let prev = self.rope[i-1];
+                let diff = current - self.rope[i-1];
+                if (isize::abs(diff.0) > 1) || (isize::abs(diff.1) > 1) {
+                    let next = prev - current;
+                    self.rope[i].0 += isize::signum(next.0);
+                    self.rope[i].1 += isize::signum(next.1);
+                    if i == (self.rope.len() -1) {
+                        self.visited.positions.insert(self.rope[i]);
+                    }
+                }
             }
-
-        // dbg!(self.head.0, self.head.1, self.tail.0, self.tail.1);
         }
     }
 }
-pub fn test9a() {
+fn test9(n: usize) {
     let path = PathBuf::from_str("./src/data/9.txt").unwrap();
     let lines = freadlines(path);
-    let mut state = State::new();
-    state.visited.positions.insert(state.tail);
-    dbg!(&state);
-    let mut i = 0;
+    let mut state = State::new(n);
+    state.visited.positions.insert(state.rope[n-1]);
     for line in lines {
         let mut movement = Movement::from_str(&line);
-        i += movement.distance;
         state.next(&mut movement);
-        // dbg!(state.head, state.tail);
     }
-    dbg!(i);
-    println!("9b: {}", state.visited.positions.len());
+    println!("9: {}", state.visited.positions.len());
+}
+pub fn test9a() {
+    test9(2)
+}
+pub fn test9b() {
+    test9(10)
 }
 // pub fn test9a() {
 //     let path = PathBuf::from_str("./src/data/9.txt").unwrap();
