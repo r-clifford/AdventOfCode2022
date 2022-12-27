@@ -85,7 +85,7 @@ impl Display {
     }
 }
 pub fn test10a() {
-    let path = PathBuf::from_str("./src/data/test.txt").unwrap();
+    let path = PathBuf::from_str("./src/data/10.txt").unwrap();
     let lines = freadlines(path);
     let mut cpu = CPU::default();
     cpu.use_display = false;

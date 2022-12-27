@@ -20,13 +20,13 @@ impl Operator {
 }
 #[derive(Debug, Clone, Copy)]
 enum Operand {
-    Old,
+    Old(i32),
     Value(i32),
 }
 impl Operand {
-    fn new(s: String) -> Self {
+    fn new(s: String, current: i32) -> Self {
         if s.to_lowercase() == "old" {
-            return Self::Old;
+            return Self::Old(current);
         }
         Self::Value(i32::from_str(&s).unwrap())
     }
@@ -38,20 +38,46 @@ struct Operation {
     rhs: Operand,
 }
 impl Operation {
-    fn new(op: String, lhs: String, rhs: String) -> Self {
+    fn new(op: String, lhs: String, rhs: String, current: i32) -> Self {
         Self {
             op: Operator::new(op),
-            lhs: Operand::new(lhs),
-            rhs: Operand::new(rhs),
+            lhs: Operand::new(lhs, current),
+            rhs: Operand::new(rhs, current),
+        }
+    }
+    fn update(&mut self, current: i32) {
+        self.rhs = match self.rhs {
+            Operand::Old(_) => Operand::Old(current),
+            Operand::Value(x) => Operand::Value(x),
+        };
+        self.lhs = match self.lhs {
+            Operand::Old(_) => Operand::Old(current),
+            Operand::Value(x) => Operand::Value(x),
+        };
+    }
+    fn exec(self) -> i32 {
+        let lhs = match self.lhs {
+            Operand::Old(x) => x,
+            Operand::Value(x) => x,
+        };
+        let rhs = match self.rhs {
+            Operand::Old(rhs) => rhs,
+            Operand::Value(rhs) => rhs,
+        };
+        match self.op {
+            Operator::Add => lhs + rhs,
+            Operator::Mul => lhs * rhs,
         }
     }
 }
 #[derive(Debug, Clone)]
 struct Monkey {
-    items: Vec<i32>,
+    items: VecDeque<i32>,
     op: Operation,
     div: i32,
     target: (i32, i32),
+    worry: i32,
+    inspected: i32,
 }
 impl Monkey {
     fn parse(lines: &mut VecDeque<String>) -> Self {
@@ -78,7 +104,7 @@ impl Monkey {
             .captures_iter(&line)
             .map(|s| s.get(1).unwrap().as_str().to_string())
             .map(|s| i32::from_str(&s).unwrap())
-            .collect::<Vec<i32>>();
+            .collect::<VecDeque<i32>>();
 
         let line = lines.pop_front().unwrap();
         let result = regexes[1].captures(&line).unwrap();
@@ -87,7 +113,7 @@ impl Monkey {
             result.get(2).unwrap().as_str(),
             result.get(3).unwrap().as_str(),
         );
-        let operation = Operation::new(op.to_string(), lhs.to_string(), rhs.to_string());
+        let operation = Operation::new(op.to_string(), lhs.to_string(), rhs.to_string(), 0);
 
         let line = lines.pop_front().unwrap();
         let test = regexes[2]
@@ -118,10 +144,55 @@ impl Monkey {
             op: operation,
             div: test,
             target: (if_true, if_false),
+            worry: 0,
+            inspected: 0,
         }
+    }
+
+    fn inspect(&mut self) -> i32 {
+        let item = self.items.pop_front().unwrap();
+        self.op.update(item);
+        let worry = self.op.exec() / 3;
+        self.inspected += 1;
+        worry
+    }
+    fn throw(&mut self, item: i32) -> (i32, i32) {
+        let result = item % self.div == 0;
+        if result {
+            return (self.target.0, item);
+        }
+        (self.target.1, item)
     }
 }
 
+struct State {
+    monkeys: VecDeque<Monkey>,
+}
+impl State {
+    fn next(&mut self) {
+        for i in 0..self.monkeys.len() {
+            loop {
+                if self.monkeys[i].items.len() <= 0 {
+                    break;
+                }
+                let item = self.monkeys[i].inspect();
+                let (target, item) = self.monkeys[i].throw(item);
+                dbg!(target, item);
+                self.monkeys[target as usize].items.push_back(item);
+            }
+        }
+    }
+    fn monkey_business(self) -> i32 {
+        let mut inspections = vec![];
+        self.monkeys
+            .iter()
+            .for_each(|m| inspections.push(m.inspected));
+        inspections.sort();
+        inspections[inspections.len() - 2..inspections.len()]
+            .into_iter()
+            .product()
+    }
+}
 pub fn test11a() {
     let path = PathBuf::from_str("./src/data/11.txt").unwrap();
     let mut lines: VecDeque<String> = freadlines(path).into_iter().collect();
@@ -131,6 +202,13 @@ pub fn test11a() {
         lines.pop_front();
         // break;
     }
-    dbg!(monkeys);
+    let mut state = State { monkeys };
+    for _ in 0..20 {
+        state.next();
+    }
+    for monkey in &state.monkeys {
+        dbg!(monkey.inspected);
+    }
+    println!("11a: {}", state.monkey_business());
 }
 pub fn test11b() {}
