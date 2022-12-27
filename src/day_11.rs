@@ -20,15 +20,15 @@ impl Operator {
 }
 #[derive(Debug, Clone, Copy)]
 enum Operand {
-    Old(i32),
-    Value(i32),
+    Old(u128),
+    Value(u128),
 }
 impl Operand {
-    fn new(s: String, current: i32) -> Self {
+    fn new(s: String, current: u128) -> Self {
         if s.to_lowercase() == "old" {
             return Self::Old(current);
         }
-        Self::Value(i32::from_str(&s).unwrap())
+        Self::Value(u128::from_str(&s).unwrap())
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -38,14 +38,14 @@ struct Operation {
     rhs: Operand,
 }
 impl Operation {
-    fn new(op: String, lhs: String, rhs: String, current: i32) -> Self {
+    fn new(op: String, lhs: String, rhs: String, current: u128) -> Self {
         Self {
             op: Operator::new(op),
             lhs: Operand::new(lhs, current),
             rhs: Operand::new(rhs, current),
         }
     }
-    fn update(&mut self, current: i32) {
+    fn update(&mut self, current: u128) {
         self.rhs = match self.rhs {
             Operand::Old(_) => Operand::Old(current),
             Operand::Value(x) => Operand::Value(x),
@@ -55,7 +55,7 @@ impl Operation {
             Operand::Value(x) => Operand::Value(x),
         };
     }
-    fn exec(self) -> i32 {
+    fn exec(self) -> u128 {
         let lhs = match self.lhs {
             Operand::Old(x) => x,
             Operand::Value(x) => x,
@@ -65,25 +65,23 @@ impl Operation {
             Operand::Value(rhs) => rhs,
         };
         match self.op {
-            Operator::Add => lhs + rhs,
-            Operator::Mul => lhs * rhs,
+            Operator::Add => lhs.wrapping_add(rhs),
+            Operator::Mul => lhs.wrapping_mul(rhs),
         }
     }
 }
 #[derive(Debug, Clone)]
 struct Monkey {
-    items: VecDeque<i32>,
+    items: VecDeque<u128>,
     op: Operation,
-    div: i32,
-    target: (i32, i32),
-    worry: i32,
-    inspected: i32,
+    div: u128,
+    target: (usize, usize),
+    inspected: u128,
 }
 impl Monkey {
     fn parse(lines: &mut VecDeque<String>) -> Self {
         // TODO: actually learn regex
         let regexes = vec![
-            // Regex::new(r"Monkey (\d{1,3})"),
             Regex::new(r"(\d+)"),
             Regex::new(r"Operation: new = ([a-z]{3}|\d+) (\S) ([a-z]{3}|\d+)"),
             Regex::new(r"Test: divisible by (\d+)"),
@@ -94,17 +92,13 @@ impl Monkey {
         .map(|r| r.unwrap())
         .collect::<Vec<Regex>>();
         let line = lines.pop_front().unwrap();
-        // let n = regexes[0]
-        // .captures(&line)
-        // .unwrap()
-        // .get(1)
-        // .map_or("", |s| s.as_str());
+
         let line = lines.pop_front().unwrap();
         let items = regexes[0]
             .captures_iter(&line)
             .map(|s| s.get(1).unwrap().as_str().to_string())
-            .map(|s| i32::from_str(&s).unwrap())
-            .collect::<VecDeque<i32>>();
+            .map(|s| u128::from_str(&s).unwrap())
+            .collect::<VecDeque<u128>>();
 
         let line = lines.pop_front().unwrap();
         let result = regexes[1].captures(&line).unwrap();
@@ -121,7 +115,7 @@ impl Monkey {
             .unwrap()
             .get(1)
             .map(|s| s.as_str())
-            .map(|s| i32::from_str(s).unwrap())
+            .map(|s| u128::from_str(s).unwrap())
             .unwrap();
         let line = lines.pop_front().unwrap();
         let if_true = regexes[3]
@@ -129,7 +123,7 @@ impl Monkey {
             .unwrap()
             .get(1)
             .map(|s| s.as_str())
-            .map(|s| i32::from_str(s).unwrap())
+            .map(|s| usize::from_str(s).unwrap())
             .unwrap();
         let line = lines.pop_front().unwrap();
         let if_false = regexes[4]
@@ -137,26 +131,25 @@ impl Monkey {
             .unwrap()
             .get(1)
             .map(|s| s.as_str())
-            .map(|s| i32::from_str(s).unwrap())
+            .map(|s| usize::from_str(s).unwrap())
             .unwrap();
         Self {
             items: items,
             op: operation,
             div: test,
             target: (if_true, if_false),
-            worry: 0,
             inspected: 0,
         }
     }
 
-    fn inspect(&mut self) -> i32 {
+    fn inspect(&mut self) -> u128 {
         let item = self.items.pop_front().unwrap();
         self.op.update(item);
-        let worry = self.op.exec() / 3;
+        let mut worry = self.op.exec();
         self.inspected += 1;
         worry
     }
-    fn throw(&mut self, item: i32) -> (i32, i32) {
+    fn throw(&mut self, item: u128) -> (usize, u128) {
         let result = item % self.div == 0;
         if result {
             return (self.target.0, item);
@@ -169,20 +162,20 @@ struct State {
     monkeys: VecDeque<Monkey>,
 }
 impl State {
-    fn next(&mut self) {
+    fn next(&mut self, dec_on_insp: Box<dyn Fn(u128)->u128>) {
         for i in 0..self.monkeys.len() {
             loop {
                 if self.monkeys[i].items.len() <= 0 {
                     break;
                 }
-                let item = self.monkeys[i].inspect();
+                let mut item = self.monkeys[i].inspect();
+                item = dec_on_insp(item);
                 let (target, item) = self.monkeys[i].throw(item);
-                dbg!(target, item);
                 self.monkeys[target as usize].items.push_back(item);
             }
         }
     }
-    fn monkey_business(self) -> i32 {
+    fn monkey_business(self) -> u128 {
         let mut inspections = vec![];
         self.monkeys
             .iter()
@@ -203,12 +196,30 @@ pub fn test11a() {
         // break;
     }
     let mut state = State { monkeys };
+    // let dec: u128 = state.monkeys.iter().map(|m| m.div).product();
+    let dec = 3;
+    let dec_fn = move |n| n % dec;
     for _ in 0..20 {
-        state.next();
-    }
-    for monkey in &state.monkeys {
-        dbg!(monkey.inspected);
+        state.next(Box::new(dec_fn));
     }
     println!("11a: {}", state.monkey_business());
 }
-pub fn test11b() {}
+pub fn test11b() {
+    let path = PathBuf::from_str("./src/data/11.txt").unwrap();
+    let mut lines: VecDeque<String> = freadlines(path).into_iter().collect();
+    let mut monkeys = VecDeque::new();
+    while (lines.len() > 0) {
+        monkeys.push_back(Monkey::parse(&mut lines));
+        lines.pop_front();
+        // break;
+    }
+    let mut state = State { monkeys };
+
+    // a reduction is required to avoid overflow
+    let dec: u128 = state.monkeys.iter().map(|m| m.div).product();
+    let dec_fn = move |n| n % dec;
+    for _ in 0..10000 {
+        state.next(Box::new(dec_fn));
+    }
+    println!("11b: {}", state.monkey_business());
+}
