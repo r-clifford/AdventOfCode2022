@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use crate::utils::freadlines;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum NodeType {
     Start,
     End,
@@ -58,6 +58,7 @@ impl Eq for Node {}
 struct Graph {
     nodes: VecDeque<VecDeque<Node>>,
     start: (usize, usize),
+    end: (usize, usize),
     queue: BinaryHeap<Reverse<Node>>,
 }
 impl Graph {
@@ -84,6 +85,7 @@ impl Graph {
             })
             .collect::<VecDeque<VecDeque<Node>>>();
         let start = start.unwrap();
+        let end = end.unwrap();
         // let queue = nodes
         //     .clone()
         //     .into_iter()
@@ -94,25 +96,34 @@ impl Graph {
         Self {
             nodes,
             start,
+            end,
             queue,
         }
     }
-    fn pathfind(&mut self) -> Node {
-        let mut first_node = &mut self.nodes[self.start.1][self.start.0];
+    fn pathfind(&mut self, startx: usize, starty: usize, end_el: Option<usize>) -> Vec<Node> {
+        let mut result = vec![];
+        let mut first_node = &mut self.nodes[starty][startx];
         first_node.dist = 0;
         first_node.visited = true;
         self.queue.push(Reverse(*first_node));
-        let mut current_node ;
-        // while self.queue.len() > 0 {
-        loop {
+        let mut current_node;
+        while self.queue.len() > 0 {
             current_node = self.queue.pop().unwrap();
             let loc = current_node.0.location;
             // dbg!(loc);
             let current_el = match current_node.0.elevation {
                 NodeType::Elevation(n) => n,
                 NodeType::Start => 0,
-                NodeType::End => return current_node.0, // TODO: check range
+                NodeType::End => 25, // TODO: check range
             };
+            if end_el.is_none() {
+                match current_node.0.elevation {
+                    NodeType::End => return vec![current_node.0],
+                    _ => {}
+                }
+            } else if current_el == end_el.unwrap() as u8 {
+                result.push(current_node.0);
+            }
             let mut neighbors = vec![
                 (loc.0.checked_sub(1), Some(loc.1)),
                 (Some(loc.0 + 1), Some(loc.1)),
@@ -132,7 +143,9 @@ impl Graph {
                     NodeType::Start => 0,
                     NodeType::End => 25,
                 };
-                if neighbor_el as i32 - current_el as i32 <= 1 {
+                if (neighbor_el as i32 - current_el as i32 <= 1) && end_el.is_none()
+                    || (current_el as i32 - neighbor_el as i32 <= 1) && end_el.is_some()
+                {
                     if !node.visited {
                         node.dist = a;
                         node.prev = Some(current_node.0.location);
@@ -142,6 +155,7 @@ impl Graph {
                 }
             }
         }
+        result
     }
 }
 fn bounds_check(loc: (Option<usize>, Option<usize>), x: usize, y: usize) -> Option<(usize, usize)> {
@@ -168,14 +182,16 @@ pub fn test12a() {
     let path = PathBuf::from_str("./src/data/12.txt").unwrap();
     let lines = freadlines(path).into_iter().collect();
     let mut graph = Graph::new(lines);
-    let node = graph.pathfind();
-    let mut current = node;
-    let mut i = 0;
-    while current.prev.is_some() {
-        let prev = current.prev.unwrap();
-        current = graph.nodes[prev.1][prev.0];
-        i+=1;
-    }
-    println!("12a: {}", i);
+    let node = graph.pathfind(graph.start.0, graph.start.1, None);
+    println!("12a: {}", node[0].dist);
 }
-pub fn test12b() {}
+pub fn test12b() {
+    let path = PathBuf::from_str("./src/data/12.txt").unwrap();
+    let lines = freadlines(path).into_iter().collect();
+    let mut graph = Graph::new(lines);
+
+    let nodes = graph.pathfind(graph.end.0, graph.end.1, Some(0));
+    let min = nodes.iter().map(|n| n.dist).min().unwrap();
+
+    println!("12b: {}", min);
+}
